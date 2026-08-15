@@ -1,0 +1,170 @@
+.lm-voice {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px 14px 16px;
+  gap: 10px;
+}
+
+.lm-voice-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.lm-voice-titles {
+  min-width: 0;
+}
+
+.lm-voice-title {
+  font-weight: var(--font-semibold);
+  font-size: var(--font-ui-medium);
+}
+
+.lm-voice-status {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.lm-voice-head-btns {
+  display: flex;
+  align-items: center;
+}
+
+.lm-voice-stage {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 4px;
+}
+
+.lm-voice-mic {
+  appearance: none;
+  width: 4.5rem;
+  height: 4.5rem;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  transition: transform 0.12s ease, filter 0.12s ease;
+}
+
+.lm-voice-mic:hover {
+  filter: brightness(1.06);
+}
+
+.lm-voice-mic svg {
+  width: 1.7rem;
+  height: 1.7rem;
+}
+
+.lm-voice-mic.is-live {
+  animation: lm-voice-pulse 1.4s ease-in-out infinite;
+  background: var(--color-red);
+  color: var(--text-on-accent, #fff);
+}
+
+@keyframes lm-voice-pulse {
+  50% {
+    transform: scale(0.94);
+  }
+}
+
+.lm-voice-tools {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+}
+
+.lm-voice-tools .clickable-icon.is-off {
+  opacity: 0.35;
+}
+
+.lm-voice-voice {
+  max-width: 11rem;
+  margin-left: 4px;
+}
+
+.lm-voice-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.lm-voice-input {
+  flex: 1;
+  resize: none;
+}
+
+.lm-voice-send {
+  appearance: none;
+  border: none;
+  background: var(--interactive-normal);
+  color: var(--text-normal);
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: var(--radius-s);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.lm-voice-send:hover {
+  background: var(--interactive-hover);
+}
+
+.lm-voice-log {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
+.lm-voice-msg {
+  font-size: var(--font-ui-small);
+  line-height: 1.4;
+  padding: 8px 10px;
+  border-radius: var(--radius-m);
+  max-width: 92%;
+}
+
+.lm-voice-msg.is-you {
+  align-self: flex-end;
+  background: var(--background-modifier-hover);
+}
+
+.lm-voice-msg.is-bot {
+  align-self: flex-start;
+  background: var(--background-modifier-border);
+}
+
+.lm-voice-msg.is-tool {
+  align-self: stretch;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.lm-voice-msg.is-sys {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.lm-voice-msg.is-err {
+  color: var(--text-error);
+  font-size: var(--font-ui-smaller);
+}
+
+.lm-voice-prompt {
+  width: 100%;
+}

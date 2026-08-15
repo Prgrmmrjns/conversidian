@@ -1,0 +1,21 @@
+{
+  "name": "mistral-voice",
+  "version": "1.0.0",
+  "description": "Talk to your Obsidian vault with Mistral voice (Voxtral STT/TTS) and markdown file tools.",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": ["obsidian", "plugin", "mistral", "voice", "tts"],
+  "author": "Jonas Wolber",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "esbuild": "0.25.5",
+    "obsidian": "latest",
+    "typescript": "^5.8.3"
+  }
+}

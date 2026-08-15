@@ -1,0 +1,6 @@
+node_modules/
+.venv/
+.cursor/
+.DS_Store
+*.js.map
+data.json
