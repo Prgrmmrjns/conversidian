@@ -1,6 +1,6 @@
 {
   "name": "mistral-voice",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Conversidian — talk to your Obsidian vault with Mistral, Ollama, or LM Studio.",
   "main": "main.js",
   "type": "module",

@@ -1,7 +1,7 @@
 {
 	"id": "mistral-voice",
 	"name": "Conversidian",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "1.8.0",
 	"description": "Talk to your vault with Mistral, Ollama, or LM Studio. Speak or type, and optionally edit markdown notes.",
 	"author": "Jonas Wolber",
