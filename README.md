@@ -2,6 +2,8 @@
 
 Talk to your [Obsidian](https://obsidian.md) vault with [Mistral](https://mistral.ai). Speak or type; the agent can list, read, create, edit, or trash markdown notes — only the actions you allow.
 
+![Mistral Voice](screenshot.png)
+
 Desktop only (microphone). Requires a Mistral API key.
 
 ## How to use
@@ -16,13 +18,18 @@ Toolbar (in the view):
 | Control | What it does |
 |---------|----------------|
 | Speaker | Speak replies on/off |
+| Bot | Tool calls on/off |
+| Book | Read only (no create/edit/delete) |
 | Pencil | Allow creating and editing notes |
 | Trash | Allow moving notes to the Obsidian trash |
+| Globe | Fetch public web pages |
+| Eye off | Hide chat — mic only, no transcript |
 | Voice | Choose a Voxtral voice |
 | Gear | Open full settings |
-| X | Clear the conversation |
 
-Delete is **off** by default. Turn it on in the view or in settings. File tools can be limited to one folder.
+Settings also include: system prompt, context notes (vault paths compacted into the prompt each turn), notes folder, active file only, and open after write.
+
+Delete is **off** by default. Internet is **off** by default.
 
 ## Privacy
 

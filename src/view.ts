@@ -1,4 +1,4 @@
-import { ItemView, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
 import type LMVoicePlugin from "./main";
 import { VaultAgent, type ChatMsg } from "./agent";
 import { VoiceIO } from "./audio";
@@ -9,12 +9,18 @@ export const VIEW_TYPE = "mistral-voice-view";
 type Phase = "idle" | "listen" | "think" | "speak";
 
 export class VoiceView extends ItemView {
+  private rootEl!: HTMLElement;
   private logEl!: HTMLElement;
+  private composerEl!: HTMLElement;
   private statusEl!: HTMLElement;
   private micBtn!: HTMLButtonElement;
   private speakBtn!: HTMLButtonElement;
+  private toolsBtn!: HTMLButtonElement;
+  private readBtn!: HTMLButtonElement;
   private writeBtn!: HTMLButtonElement;
   private deleteBtn!: HTMLButtonElement;
+  private netBtn!: HTMLButtonElement;
+  private quietBtn!: HTMLButtonElement;
   private voiceSel!: HTMLSelectElement;
   private inputEl!: HTMLTextAreaElement;
   private running = false;
@@ -45,6 +51,7 @@ export class VoiceView extends ItemView {
     const root = this.contentEl;
     root.empty();
     root.addClass("lm-voice");
+    this.rootEl = root;
 
     const head = root.createDiv({ cls: "lm-voice-head" });
     const titles = head.createDiv({ cls: "lm-voice-titles" });
@@ -61,13 +68,13 @@ export class VoiceView extends ItemView {
     this.micBtn.addEventListener("click", () => void this.toggle());
 
     const tools = root.createDiv({ cls: "lm-voice-tools" });
-    this.speakBtn = this.iconBtn(tools, "volume-2", "Speak replies", () =>
-      this.toggleSetting("speakReplies")
-    );
+    this.speakBtn = this.iconBtn(tools, "volume-2", "Speak replies", () => this.toggleSetting("speakReplies"));
+    this.toolsBtn = this.iconBtn(tools, "bot", "Tool calls", () => this.toggleSetting("allowTools"));
+    this.readBtn = this.iconBtn(tools, "book", "Read only", () => this.toggleSetting("readOnly"));
     this.writeBtn = this.iconBtn(tools, "pencil", "Allow writing notes", () => this.toggleWrite());
-    this.deleteBtn = this.iconBtn(tools, "trash-2", "Allow deleting notes", () =>
-      this.toggleSetting("allowDelete")
-    );
+    this.deleteBtn = this.iconBtn(tools, "trash-2", "Allow deleting notes", () => this.toggleSetting("allowDelete"));
+    this.netBtn = this.iconBtn(tools, "globe", "Use internet", () => this.toggleSetting("allowInternet"));
+    this.quietBtn = this.iconBtn(tools, "eye-off", "Hide chat", () => this.toggleSetting("hideChat"));
 
     this.voiceSel = tools.createEl("select", { cls: "dropdown lm-voice-voice" });
     for (const v of TTS_VOICES) {
@@ -80,14 +87,17 @@ export class VoiceView extends ItemView {
     });
 
     this.logEl = root.createDiv({ cls: "lm-voice-log" });
-    this.line("sys", "Tap the mic. Pause when you’re done. The agent can change markdown if you allow it.");
+    this.line("sys", "Tap the mic. Pause when you’re done.");
 
-    const row = root.createDiv({ cls: "lm-voice-row" });
-    this.inputEl = row.createEl("textarea", {
+    this.composerEl = root.createDiv({ cls: "lm-voice-row" });
+    this.inputEl = this.composerEl.createEl("textarea", {
       cls: "lm-voice-input",
       attr: { rows: "2", placeholder: "Or type a message…" },
     });
-    const send = row.createEl("button", { cls: "lm-voice-send", attr: { type: "button", "aria-label": "Send" } });
+    const send = this.composerEl.createEl("button", {
+      cls: "lm-voice-send",
+      attr: { type: "button", "aria-label": "Send" },
+    });
     setIcon(send, "send");
     send.addEventListener("click", () => void this.sendTyped());
     this.inputEl.addEventListener("keydown", (e) => {
@@ -124,10 +134,12 @@ export class VoiceView extends ItemView {
   private clearChat() {
     this.history = [];
     this.logEl.empty();
-    this.line("sys", "Conversation cleared.");
+    if (!this.plugin.settings.hideChat) this.line("sys", "Conversation cleared.");
   }
 
-  private async toggleSetting(key: "speakReplies" | "allowDelete") {
+  private async toggleSetting(
+    key: "speakReplies" | "allowDelete" | "allowTools" | "readOnly" | "allowInternet" | "hideChat"
+  ) {
     this.plugin.settings[key] = !this.plugin.settings[key];
     await this.plugin.saveSettings();
     this.syncTools();
@@ -137,6 +149,7 @@ export class VoiceView extends ItemView {
     const on = !(this.plugin.settings.allowCreate && this.plugin.settings.allowEdit);
     this.plugin.settings.allowCreate = on;
     this.plugin.settings.allowEdit = on;
+    if (on) this.plugin.settings.readOnly = false;
     await this.plugin.saveSettings();
     this.syncTools();
   }
@@ -144,9 +157,14 @@ export class VoiceView extends ItemView {
   private syncTools() {
     const s = this.plugin.settings;
     this.speakBtn.toggleClass("is-off", !s.speakReplies);
-    this.writeBtn.toggleClass("is-off", !(s.allowCreate && s.allowEdit));
-    this.deleteBtn.toggleClass("is-off", !s.allowDelete);
+    this.toolsBtn.toggleClass("is-off", !s.allowTools);
+    this.readBtn.toggleClass("is-off", !s.readOnly);
+    this.writeBtn.toggleClass("is-off", s.readOnly || !(s.allowCreate && s.allowEdit));
+    this.deleteBtn.toggleClass("is-off", s.readOnly || !s.allowDelete);
+    this.netBtn.toggleClass("is-off", !s.allowInternet);
+    this.quietBtn.toggleClass("is-off", !s.hideChat);
     this.voiceSel.value = s.ttsVoice;
+    this.rootEl.toggleClass("is-quiet", s.hideChat);
   }
 
   private setPhase(p: Phase) {
@@ -158,6 +176,10 @@ export class VoiceView extends ItemView {
   }
 
   private line(kind: "you" | "bot" | "tool" | "sys" | "err", text: string) {
+    if (this.plugin.settings.hideChat) {
+      if (kind === "err" || kind === "tool") new Notice(text);
+      return this.statusEl;
+    }
     const el = this.logEl.createDiv({ cls: `lm-voice-msg is-${kind}` });
     el.setText(text);
     this.logEl.scrollTop = this.logEl.scrollHeight;
@@ -219,6 +241,7 @@ export class VoiceView extends ItemView {
     const botEl = this.line("bot", "…");
     const reply = await this.agent.run(this.history, (name, detail) => this.line("tool", `${name}: ${detail}`));
     botEl.setText(reply || "(no reply)");
+    if (this.plugin.settings.hideChat && reply) this.statusEl.setText(reply.slice(0, 80));
     this.history.push({ role: "assistant", content: reply });
     if (this.history.length > 24) this.history = this.history.slice(-24);
     if (reply && this.plugin.settings.speakReplies) {

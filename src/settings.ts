@@ -11,12 +11,19 @@ export interface LMVoiceSettings {
   ttsVoice: string;
   speakReplies: boolean;
   keepListening: boolean;
+  hideChat: boolean;
+  allowTools: boolean;
+  readOnly: boolean;
   allowList: boolean;
   allowRead: boolean;
   allowCreate: boolean;
   allowEdit: boolean;
   allowDelete: boolean;
+  allowInternet: boolean;
+  openAfterWrite: boolean;
+  activeFileOnly: boolean;
   notesFolder: string;
+  contextNotes: string;
   systemPrompt: string;
 }
 
@@ -28,12 +35,19 @@ export const DEFAULT_SETTINGS: LMVoiceSettings = {
   ttsVoice: "en_paul_confident",
   speakReplies: true,
   keepListening: true,
+  hideChat: false,
+  allowTools: true,
+  readOnly: false,
   allowList: true,
   allowRead: true,
   allowCreate: true,
   allowEdit: true,
   allowDelete: false,
+  allowInternet: false,
+  openAfterWrite: false,
+  activeFileOnly: false,
   notesFolder: "",
+  contextNotes: "",
   systemPrompt: `You are a fast English voice agent inside Obsidian.
 Speak short. One or two sentences, then act. No markdown in spoken replies.
 After a file change, confirm the path in one short sentence.
@@ -97,6 +111,8 @@ export class LMVoiceSettingTab extends PluginSettingTab {
         })
     );
 
+    new Setting(containerEl).setName("Interface").setHeading();
+
     new Setting(containerEl)
       .setName("Speak replies")
       .setDesc("Play the assistant’s answer out loud.")
@@ -107,7 +123,22 @@ export class LMVoiceSettingTab extends PluginSettingTab {
       .setDesc("After each reply, listen again until you stop.")
       .addToggle((t) => t.setValue(s.keepListening).onChange((v) => save(() => (s.keepListening = v))));
 
-    new Setting(containerEl).setName("Permissions").setHeading();
+    new Setting(containerEl)
+      .setName("Hide chat")
+      .setDesc("Mic only. No transcript — useful if you just want notes edited.")
+      .addToggle((t) => t.setValue(s.hideChat).onChange((v) => save(() => (s.hideChat = v))));
+
+    new Setting(containerEl).setName("Tools").setHeading();
+
+    new Setting(containerEl)
+      .setName("Tool calls")
+      .setDesc("Let the model list/read/edit notes and use other tools. Off = talk only.")
+      .addToggle((t) => t.setValue(s.allowTools).onChange((v) => save(() => (s.allowTools = v))));
+
+    new Setting(containerEl)
+      .setName("Read only")
+      .setDesc("Block create, edit, and delete even if those toggles are on.")
+      .addToggle((t) => t.setValue(s.readOnly).onChange((v) => save(() => (s.readOnly = v))));
 
     new Setting(containerEl)
       .setName("List notes")
@@ -125,6 +156,21 @@ export class LMVoiceSettingTab extends PluginSettingTab {
       .setName("Delete notes")
       .setDesc("Moves markdown notes to the Obsidian trash. Off by default.")
       .addToggle((t) => t.setValue(s.allowDelete).onChange((v) => save(() => (s.allowDelete = v))));
+
+    new Setting(containerEl)
+      .setName("Use internet")
+      .setDesc("Allow fetching a public http(s) page as text.")
+      .addToggle((t) => t.setValue(s.allowInternet).onChange((v) => save(() => (s.allowInternet = v))));
+
+    new Setting(containerEl)
+      .setName("Open after write")
+      .setDesc("Open a note after the agent creates or edits it.")
+      .addToggle((t) => t.setValue(s.openAfterWrite).onChange((v) => save(() => (s.openAfterWrite = v))));
+
+    new Setting(containerEl)
+      .setName("Active file only")
+      .setDesc("File tools may touch only the note that is open.")
+      .addToggle((t) => t.setValue(s.activeFileOnly).onChange((v) => save(() => (s.activeFileOnly = v))));
 
     new Setting(containerEl)
       .setName("Notes folder")
@@ -160,7 +206,17 @@ export class LMVoiceSettingTab extends PluginSettingTab {
       .setDesc("{{date}} and {{file}} are filled in each turn.")
       .addTextArea((t) => {
         t.setValue(s.systemPrompt).onChange((v) => save(() => (s.systemPrompt = v)));
-        t.inputEl.rows = 8;
+        t.inputEl.rows = 10;
+        t.inputEl.addClass("lm-voice-prompt");
+      });
+
+    new Setting(containerEl)
+      .setName("Context notes")
+      .setDesc("Vault paths, one per line. Compacted and appended to the system prompt each turn.")
+      .addTextArea((t) => {
+        t.setPlaceholder("AGENTS.md\nJonas.md");
+        t.setValue(s.contextNotes).onChange((v) => save(() => (s.contextNotes = v)));
+        t.inputEl.rows = 4;
         t.inputEl.addClass("lm-voice-prompt");
       });
   }

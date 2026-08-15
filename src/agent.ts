@@ -6,6 +6,8 @@ export type ChatMsg = { role: "user" | "assistant" | "tool"; content: string; to
 type ToolCall = { id: string; function: { name: string; arguments: string } };
 
 const API = "https://api.mistral.ai/v1";
+const CTX_PER_NOTE = 1200;
+const CTX_TOTAL = 2400;
 
 function tool(name: string, description: string, properties: Record<string, unknown>, required: string[]) {
   return {
@@ -38,6 +40,25 @@ const TOOL_PATCH = tool("patch_file", "Replace one exact substring in a markdown
 const TOOL_DELETE = tool("delete_file", "Move a markdown note to the Obsidian trash.", {
   path: { type: "string" },
 }, ["path"]);
+const TOOL_FETCH = tool("fetch_url", "Fetch a public http(s) page and return plain text.", {
+  url: { type: "string" },
+}, ["url"]);
+
+export function compactNote(src: string, max: number): string {
+  let t = src.replace(/^---[\s\S]*?---\s*/, "");
+  t = t.replace(/```[\s\S]*?```/g, " ");
+  t = t.replace(/!\[[^\]]*\]\([^)]+\)/g, " ");
+  t = t.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+  t = t.replace(/\[\[[^\]|#/]+[|#]([^\]]+)\]\]/g, "$1");
+  t = t.replace(/\[\[([^\]|#]+)\]\]/g, "$1");
+  t = t.replace(/^#+\s+/gm, "");
+  t = t.replace(/^[>|*\-]+\s?/gm, "");
+  t = t.replace(/[`*_~]/g, "");
+  t = t.replace(/https?:\/\/\S+/g, "");
+  t = t.replace(/\n{2,}/g, "\n");
+  t = t.replace(/[ \t]+/g, " ");
+  return t.replace(/\s+\n/g, "\n").trim().slice(0, max);
+}
 
 export class VaultAgent {
   constructor(
@@ -46,38 +67,73 @@ export class VaultAgent {
     private key: () => Promise<string>
   ) {}
 
-  systemText(): string {
+  private canWrite(): boolean {
+    const s = this.settings();
+    return s.allowTools && !s.readOnly;
+  }
+
+  async systemText(): Promise<string> {
     const s = this.settings();
     const file = this.app.workspace.getActiveFile()?.path || "(none)";
     const d = new Date().toISOString().slice(0, 10);
     const caps: string[] = [];
-    if (s.allowList) caps.push("list");
-    if (s.allowRead) caps.push("read");
-    if (s.allowCreate) caps.push("create");
-    if (s.allowEdit) caps.push("edit");
-    if (s.allowDelete) caps.push("delete (trash)");
+    if (!s.allowTools) caps.push("no tools (talk only)");
+    else {
+      if (s.allowList) caps.push("list");
+      if (s.allowRead) caps.push("read");
+      if (this.canWrite() && s.allowCreate) caps.push("create");
+      if (this.canWrite() && s.allowEdit) caps.push("edit");
+      if (this.canWrite() && s.allowDelete) caps.push("delete (trash)");
+      if (s.allowInternet) caps.push("fetch http(s)");
+    }
+    if (s.readOnly) caps.push("read-only");
+    if (s.activeFileOnly) caps.push("active file only");
     const scope = s.notesFolder ? `Only inside folder: ${normalizePath(s.notesFolder)}.` : "Whole vault.";
     const extra = `\nYou may ${caps.join(", ") || "not change files"}. ${scope}`;
-    return s.systemPrompt.replaceAll("{{date}}", d).replaceAll("{{file}}", file) + extra;
+    const ctx = await this.loadContextNotes();
+    return s.systemPrompt.replaceAll("{{date}}", d).replaceAll("{{file}}", file) + extra + ctx;
+  }
+
+  private async loadContextNotes(): Promise<string> {
+    const raw = this.settings().contextNotes || "";
+    const paths = raw
+      .split(/[\n,]/)
+      .map((p) => normalizePath(p.trim().replace(/^\[\[|\]\]$/g, "")))
+      .filter(Boolean)
+      .slice(0, 6);
+    if (!paths.length) return "";
+    const chunks: string[] = [];
+    let used = 0;
+    for (const path of paths) {
+      const file = this.app.vault.getFileByPath(path.endsWith(".md") ? path : `${path}.md`) || this.app.vault.getFileByPath(path);
+      if (!file) continue;
+      const room = Math.min(CTX_PER_NOTE, CTX_TOTAL - used);
+      if (room < 80) break;
+      const compact = compactNote(await this.app.vault.read(file), room);
+      if (!compact) continue;
+      chunks.push(`\n[${file.path}]\n${compact}`);
+      used += compact.length;
+    }
+    return chunks.length ? `\n\nContext notes (compact):${chunks.join("\n")}` : "";
   }
 
   private tools() {
     const s = this.settings();
+    if (!s.allowTools) return [];
     const out = [];
-    if (s.allowList) out.push(TOOL_LIST);
+    if (s.allowList && !s.activeFileOnly) out.push(TOOL_LIST);
     if (s.allowRead) out.push(TOOL_READ);
-    if (s.allowCreate) out.push(TOOL_CREATE);
-    if (s.allowEdit) {
-      out.push(TOOL_EDIT, TOOL_PATCH);
-    }
-    if (s.allowDelete) out.push(TOOL_DELETE);
+    if (this.canWrite() && s.allowCreate && !s.activeFileOnly) out.push(TOOL_CREATE);
+    if (this.canWrite() && s.allowEdit) out.push(TOOL_EDIT, TOOL_PATCH);
+    if (this.canWrite() && s.allowDelete && !s.activeFileOnly) out.push(TOOL_DELETE);
+    if (s.allowInternet) out.push(TOOL_FETCH);
     return out;
   }
 
   async run(history: ChatMsg[], onTool: (name: string, detail: string) => void): Promise<string> {
     const s = this.settings();
     const auth = { Authorization: "Bearer " + (await this.key()), "Content-Type": "application/json" };
-    const messages: Record<string, unknown>[] = [{ role: "system", content: this.systemText() }, ...history];
+    const messages: Record<string, unknown>[] = [{ role: "system", content: await this.systemText() }, ...history];
     const tools = this.tools();
     let spoken = "";
     for (let hop = 0; hop < 8; hop++) {
@@ -147,6 +203,11 @@ export class VaultAgent {
   }
 
   private inScope(path: string): boolean {
+    const s = this.settings();
+    if (s.activeFileOnly) {
+      const cur = this.app.workspace.getActiveFile()?.path;
+      return !!cur && path === cur;
+    }
     const folder = this.allowedFolder();
     if (!folder) return true;
     return path === folder || path.startsWith(folder + "/");
@@ -156,7 +217,7 @@ export class VaultAgent {
     const p = normalizePath(path || "");
     if (!p || p.split("/").includes("..")) throw new Error(`Blocked path: ${path}`);
     if (!p.toLowerCase().endsWith(".md")) throw new Error("Markdown only (.md)");
-    if (!this.inScope(p)) throw new Error(`Outside allowed folder: ${p}`);
+    if (!this.inScope(p)) throw new Error(`Outside allowed scope: ${p}`);
     return p;
   }
 
@@ -170,13 +231,50 @@ export class VaultAgent {
     }
   }
 
+  private async afterWrite(path: string) {
+    if (!this.settings().openAfterWrite) return;
+    await this.app.workspace.openLinkText(path, "", false);
+  }
+
+  private htmlText(html: string): string {
+    return html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 4000);
+  }
+
   private async dispatch(name: string, args: Record<string, string>): Promise<string> {
     const s = this.settings();
+    if (!s.allowTools) throw new Error("Tool calls are disabled");
+    if (name === "fetch_url") {
+      if (!s.allowInternet) throw new Error("Internet is disabled");
+      const url = (args.url || "").trim();
+      if (!/^https?:\/\//i.test(url)) throw new Error("Only http(s) URLs");
+      const res = await requestUrl({ url, throw: false });
+      if (res.status >= 300) throw new Error(`HTTP ${res.status}`);
+      const raw = res.text || "";
+      const text = raw.includes("<") ? this.htmlText(raw) : raw.slice(0, 4000);
+      return text || "(empty)";
+    }
     if (name === "list_files") {
       if (!s.allowList) throw new Error("Listing notes is disabled");
+      if (s.activeFileOnly) {
+        const cur = this.app.workspace.getActiveFile()?.path;
+        return cur || "(no active file)";
+      }
       const folder = normalizePath(args.folder || this.allowedFolder() || "");
       if (folder.split("/").includes("..")) throw new Error("Blocked path");
-      if (folder && !this.inScope(folder)) throw new Error(`Outside allowed folder: ${folder}`);
+      const cap = this.allowedFolder();
+      if (folder && cap && folder !== cap && !folder.startsWith(cap + "/")) {
+        throw new Error(`Outside allowed folder: ${folder}`);
+      }
       const files = this.app.vault
         .getMarkdownFiles()
         .filter((f) => this.inScope(f.path))
@@ -193,21 +291,23 @@ export class VaultAgent {
       return (await this.app.vault.read(file)).slice(0, 12000);
     }
     if (name === "create_file") {
-      if (!s.allowCreate) throw new Error("Creating notes is disabled");
+      if (!this.canWrite() || !s.allowCreate) throw new Error("Creating notes is disabled");
       if (this.app.vault.getAbstractFileByPath(path)) throw new Error(`Exists: ${path}`);
       await this.ensureParent(path);
       await this.app.vault.create(path, args.content || "");
+      await this.afterWrite(path);
       return `Created ${path}`;
     }
     if (name === "edit_file") {
-      if (!s.allowEdit) throw new Error("Editing notes is disabled");
+      if (!this.canWrite() || !s.allowEdit) throw new Error("Editing notes is disabled");
       const file = this.app.vault.getFileByPath(path);
       if (!file) throw new Error(`Missing: ${path}`);
       await this.app.vault.process(file, () => args.content || "");
+      await this.afterWrite(path);
       return `Wrote ${path}`;
     }
     if (name === "patch_file") {
-      if (!s.allowEdit) throw new Error("Editing notes is disabled");
+      if (!this.canWrite() || !s.allowEdit) throw new Error("Editing notes is disabled");
       const file = this.app.vault.getFileByPath(path);
       if (!file) throw new Error(`Missing: ${path}`);
       const old = args.old || "";
@@ -215,10 +315,11 @@ export class VaultAgent {
         if (!old || !text.includes(old)) throw new Error("old text not found");
         return text.replace(old, args.new || "");
       });
+      await this.afterWrite(path);
       return `Patched ${path}`;
     }
     if (name === "delete_file") {
-      if (!s.allowDelete) throw new Error("Deleting notes is disabled");
+      if (!this.canWrite() || !s.allowDelete) throw new Error("Deleting notes is disabled");
       const file = this.app.vault.getFileByPath(path);
       if (!file) throw new Error(`Missing: ${path}`);
       await this.app.vault.trash(file, false);
