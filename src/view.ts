@@ -3,7 +3,7 @@ import type LMVoicePlugin from "./main";
 import { VaultAgent, type ChatMsg } from "./agent";
 import { VoiceIO } from "./audio";
 
-export const VIEW_TYPE = "mistral-voice-view";
+export const VIEW_TYPE = "vault-talk-view";
 
 type Phase = "idle" | "listen" | "think" | "speak";
 

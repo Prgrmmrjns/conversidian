@@ -1,6 +1,6 @@
 {
-  "name": "mistral-voice",
-  "version": "1.0.2",
+  "name": "vault-talk",
+  "version": "1.1.0",
   "description": "Vault Talk — speak or type to your Obsidian vault with Mistral, Ollama, or LM Studio.",
   "main": "main.js",
   "type": "module",

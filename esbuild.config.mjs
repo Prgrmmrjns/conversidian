@@ -5,7 +5,7 @@ import { builtinModules } from "node:module";
 const prod = process.argv[2] === "production";
 
 const context = await esbuild.context({
-  banner: { js: "/* mistral-voice — bundled */\n" },
+  banner: { js: "/* vault-talk — bundled */\n" },
   entryPoints: ["src/main.ts"],
   bundle: true,
   external: [
