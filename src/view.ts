@@ -31,7 +31,7 @@ export class VoiceView extends ItemView {
   }
 
   getDisplayText() {
-    return "Conversidian";
+    return "Vault Talk";
   }
 
   getIcon() {
@@ -46,7 +46,7 @@ export class VoiceView extends ItemView {
 
     const head = root.createDiv({ cls: "lm-voice-head" });
     const titles = head.createDiv({ cls: "lm-voice-titles" });
-    titles.createDiv({ cls: "lm-voice-title", text: "Conversidian" });
+    titles.createDiv({ cls: "lm-voice-title", text: "Vault Talk" });
     this.statusEl = titles.createDiv({ cls: "lm-voice-status", text: "Ready" });
 
     const headBtns = head.createDiv({ cls: "lm-voice-head-btns" });

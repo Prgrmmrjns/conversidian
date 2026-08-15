@@ -1,7 +1,7 @@
 {
   "name": "mistral-voice",
-  "version": "1.0.1",
-  "description": "Conversidian — talk to your Obsidian vault with Mistral, Ollama, or LM Studio.",
+  "version": "1.0.2",
+  "description": "Vault Talk — speak or type to your Obsidian vault with Mistral, Ollama, or LM Studio.",
   "main": "main.js",
   "type": "module",
   "scripts": {
@@ -9,7 +9,7 @@
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
     "version": "node version-bump.mjs && git add manifest.json versions.json"
   },
-  "keywords": ["obsidian", "plugin", "conversidian", "mistral", "voice", "tts"],
+  "keywords": ["obsidian", "plugin", "vault-talk", "mistral", "voice", "tts"],
   "author": "Jonas Wolber",
   "license": "MIT",
   "devDependencies": {

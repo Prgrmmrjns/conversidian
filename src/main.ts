@@ -9,8 +9,8 @@ export default class LMVoicePlugin extends Plugin {
   async onload() {
     await this.loadSettings();
     this.registerView(VIEW_TYPE, (leaf) => new VoiceView(leaf, this));
-    this.addRibbonIcon("mic", "Open Conversidian", () => void this.activate());
-    this.addCommand({ id: "open", name: "Open Conversidian", callback: () => void this.activate() });
+    this.addRibbonIcon("mic", "Open Vault Talk", () => void this.activate());
+    this.addCommand({ id: "open", name: "Open", callback: () => void this.activate() });
     this.addCommand({
       id: "start-talking",
       name: "Start talking",
