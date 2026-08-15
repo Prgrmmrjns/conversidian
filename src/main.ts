@@ -1,5 +1,6 @@
 import { Plugin } from "obsidian";
-import { DEFAULT_SETTINGS, LMVoiceSettingTab, type LMVoiceSettings } from "./settings";
+import { DEFAULT_SETTINGS, LMVoiceSettingTab, ACCENTS, type LMVoiceSettings } from "./settings";
+import { CHAT_PROVIDERS, SPEECH_PROVIDERS } from "./providers";
 import { VIEW_TYPE, VoiceView } from "./view";
 
 export default class LMVoicePlugin extends Plugin {
@@ -8,8 +9,8 @@ export default class LMVoicePlugin extends Plugin {
   async onload() {
     await this.loadSettings();
     this.registerView(VIEW_TYPE, (leaf) => new VoiceView(leaf, this));
-    this.addRibbonIcon("mic", "Open Mistral Voice", () => void this.activate());
-    this.addCommand({ id: "open", name: "Open Mistral Voice", callback: () => void this.activate() });
+    this.addRibbonIcon("mic", "Open Conversidian", () => void this.activate());
+    this.addCommand({ id: "open", name: "Open Conversidian", callback: () => void this.activate() });
     this.addCommand({
       id: "start-talking",
       name: "Start talking",
@@ -54,9 +55,16 @@ export default class LMVoicePlugin extends Plugin {
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    if (!ACCENTS.some((a) => a.id === this.settings.accent)) this.settings.accent = "theme";
+    if (!CHAT_PROVIDERS.some((p) => p.id === this.settings.chatProvider)) this.settings.chatProvider = "mistral";
+    if (!SPEECH_PROVIDERS.some((p) => p.id === this.settings.sttProvider)) this.settings.sttProvider = "mistral";
+    if (!SPEECH_PROVIDERS.some((p) => p.id === this.settings.ttsProvider)) this.settings.ttsProvider = "mistral";
   }
 
   async saveSettings() {
     await this.saveData(this.settings);
+    for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
+      if (leaf.view instanceof VoiceView) leaf.view.applyChrome();
+    }
   }
 }

@@ -1,10 +1,20 @@
 .lm-voice {
+  --lm-accent: var(--interactive-accent);
   display: flex;
   flex-direction: column;
   height: 100%;
   padding: 12px 14px 16px;
   gap: 10px;
 }
+
+.lm-voice[data-accent="red"] { --lm-accent: var(--color-red); }
+.lm-voice[data-accent="orange"] { --lm-accent: var(--color-orange); }
+.lm-voice[data-accent="yellow"] { --lm-accent: var(--color-yellow); }
+.lm-voice[data-accent="green"] { --lm-accent: var(--color-green); }
+.lm-voice[data-accent="cyan"] { --lm-accent: var(--color-cyan); }
+.lm-voice[data-accent="blue"] { --lm-accent: var(--color-blue); }
+.lm-voice[data-accent="pink"] { --lm-accent: var(--color-pink); }
+.lm-voice[data-accent="purple"] { --lm-accent: var(--color-purple); }
 
 .lm-voice-head {
   display: flex;
@@ -48,9 +58,9 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  background: var(--lm-accent);
+  color: var(--background-primary);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--lm-accent) 42%, transparent);
   transition: transform 0.12s ease, filter 0.12s ease;
 }
 
@@ -66,7 +76,8 @@
 .lm-voice-mic.is-live {
   animation: lm-voice-pulse 1.4s ease-in-out infinite;
   background: var(--color-red);
-  color: var(--text-on-accent, #fff);
+  color: var(--background-primary);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--color-red) 45%, transparent);
 }
 
 @keyframes lm-voice-pulse {
@@ -81,6 +92,13 @@
   justify-content: center;
   flex-wrap: wrap;
   gap: 2px 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius-l);
+  background: var(--background-secondary);
+}
+
+.lm-voice-tools .clickable-icon:not(.is-off) {
+  color: var(--lm-accent);
 }
 
 .lm-voice-tools .clickable-icon.is-off {
@@ -91,6 +109,44 @@
   max-width: 11rem;
   margin-left: 4px;
 }
+
+.lm-voice-swatches {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lm-voice-swatch {
+  appearance: none;
+  width: 0.9rem;
+  height: 0.9rem;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  background: var(--interactive-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--background-modifier-border) 80%, transparent);
+}
+
+.lm-voice-swatch:hover {
+  transform: scale(1.12);
+}
+
+.lm-voice-swatch.is-on {
+  border-color: var(--text-normal);
+}
+
+.lm-voice-swatch[data-accent="theme"] { background: var(--interactive-accent); }
+.lm-voice-swatch[data-accent="red"] { background: var(--color-red); }
+.lm-voice-swatch[data-accent="orange"] { background: var(--color-orange); }
+.lm-voice-swatch[data-accent="yellow"] { background: var(--color-yellow); }
+.lm-voice-swatch[data-accent="green"] { background: var(--color-green); }
+.lm-voice-swatch[data-accent="cyan"] { background: var(--color-cyan); }
+.lm-voice-swatch[data-accent="blue"] { background: var(--color-blue); }
+.lm-voice-swatch[data-accent="pink"] { background: var(--color-pink); }
+.lm-voice-swatch[data-accent="purple"] { background: var(--color-purple); }
 
 .lm-voice-row {
   display: flex;
@@ -106,8 +162,8 @@
 .lm-voice-send {
   appearance: none;
   border: none;
-  background: var(--interactive-normal);
-  color: var(--text-normal);
+  background: var(--lm-accent);
+  color: var(--background-primary);
   width: 2.2rem;
   height: 2.2rem;
   border-radius: var(--radius-s);
@@ -118,7 +174,7 @@
 }
 
 .lm-voice-send:hover {
-  background: var(--interactive-hover);
+  filter: brightness(1.08);
 }
 
 .lm-voice-log {
@@ -127,7 +183,9 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 4px 0 8px;
+  padding: 10px;
+  border-radius: var(--radius-l);
+  background: var(--background-secondary);
 }
 
 .lm-voice-msg {
@@ -140,12 +198,13 @@
 
 .lm-voice-msg.is-you {
   align-self: flex-end;
-  background: var(--background-modifier-hover);
+  background: color-mix(in srgb, var(--lm-accent) 22%, var(--background-primary));
+  color: var(--text-normal);
 }
 
 .lm-voice-msg.is-bot {
   align-self: flex-start;
-  background: var(--background-modifier-border);
+  background: var(--background-primary);
 }
 
 .lm-voice-msg.is-tool {

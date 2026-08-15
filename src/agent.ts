@@ -1,11 +1,11 @@
 import { App, normalizePath, requestUrl } from "obsidian";
+import { chatHeaders, chatRoot, defaultChatModel, parseJson } from "./providers";
 import type { LMVoiceSettings } from "./settings";
 
 export type ChatMsg = { role: "user" | "assistant" | "tool"; content: string; tool_call_id?: string };
 
 type ToolCall = { id: string; function: { name: string; arguments: string } };
 
-const API = "https://api.mistral.ai/v1";
 const CTX_PER_NOTE = 1200;
 const CTX_TOTAL = 2400;
 
@@ -90,8 +90,20 @@ export class VaultAgent {
     if (s.activeFileOnly) caps.push("active file only");
     const scope = s.notesFolder ? `Only inside folder: ${normalizePath(s.notesFolder)}.` : "Whole vault.";
     const extra = `\nYou may ${caps.join(", ") || "not change files"}. ${scope}`;
+    const persona = await this.loadPersonality();
     const ctx = await this.loadContextNotes();
-    return s.systemPrompt.replaceAll("{{date}}", d).replaceAll("{{file}}", file) + extra + ctx;
+    return s.systemPrompt.replaceAll("{{date}}", d).replaceAll("{{file}}", file) + extra + persona + ctx;
+  }
+
+  private async loadPersonality(): Promise<string> {
+    const raw = (this.settings().personalityFile || "Personality.md").trim();
+    if (!raw) return "";
+    const path = normalizePath(raw.replace(/^\[\[|\]\]$/g, ""));
+    const file =
+      this.app.vault.getFileByPath(path.endsWith(".md") ? path : `${path}.md`) || this.app.vault.getFileByPath(path);
+    if (!file) return "";
+    const body = (await this.app.vault.read(file)).replace(/^---[\s\S]*?---\s*/, "").trim().slice(0, 2000);
+    return body ? `\n\nPersonality:\n${body}` : "";
   }
 
   private async loadContextNotes(): Promise<string> {
@@ -132,13 +144,16 @@ export class VaultAgent {
 
   async run(history: ChatMsg[], onTool: (name: string, detail: string) => void): Promise<string> {
     const s = this.settings();
-    const auth = { Authorization: "Bearer " + (await this.key()), "Content-Type": "application/json" };
+    const model = s.llmModel || defaultChatModel(s.chatProvider);
+    if (!model) throw new Error("Pick a chat model in settings.");
+    const key = s.chatProvider === "mistral" ? await this.key() : "";
+    const headers = chatHeaders(s, key);
     const messages: Record<string, unknown>[] = [{ role: "system", content: await this.systemText() }, ...history];
     const tools = this.tools();
     let spoken = "";
     for (let hop = 0; hop < 8; hop++) {
       const body: Record<string, unknown> = {
-        model: s.llmModel || "mistral-small-latest",
+        model,
         temperature: 0.3,
         messages,
       };
@@ -147,24 +162,28 @@ export class VaultAgent {
         body.tool_choice = "auto";
       }
       const res = await requestUrl({
-        url: `${API}/chat/completions`,
+        url: `${chatRoot(s)}/chat/completions`,
         method: "POST",
-        headers: auth,
+        headers,
         body: JSON.stringify(body),
         throw: false,
       });
       if (res.status >= 300) throw new Error(`LLM ${res.status}: ${(res.text || "").slice(0, 200)}`);
-      const json = typeof res.json === "object" && res.json ? res.json : JSON.parse(res.text || "{}");
-      const msg = (json as { choices?: { message?: { content?: string; tool_calls?: ToolCall[] } }[] }).choices?.[0]
-        ?.message;
+      const json = parseJson(res);
+      const choices = json.choices;
+      const first = Array.isArray(choices) ? choices[0] : null;
+      const msg =
+        first && typeof first === "object" && first && "message" in first
+          ? (first as { message?: { content?: unknown; tool_calls?: ToolCall[] } }).message
+          : undefined;
       const calls = msg?.tool_calls || [];
       if (!calls.length) {
-        spoken = msg?.content || spoken;
+        spoken = messageText(msg?.content) || spoken;
         break;
       }
       messages.push({
         role: "assistant",
-        content: msg?.content || "",
+        content: messageText(msg?.content),
         tool_calls: calls.map((c) => ({
           id: c.id,
           type: "function",
@@ -180,12 +199,8 @@ export class VaultAgent {
   }
 
   private async exec(call: ToolCall, onTool: (name: string, detail: string) => void): Promise<string> {
-    let args: Record<string, string> = {};
-    try {
-      args = JSON.parse(call.function.arguments || "{}");
-    } catch {
-      return `Bad arguments: ${call.function.arguments}`;
-    }
+    const args = parseToolArgs(call.function.arguments);
+    if (args == null) return `Bad arguments: ${call.function.arguments}`;
     try {
       const out = await this.dispatch(call.function.name, args);
       onTool(call.function.name, out.slice(0, 160));
@@ -326,5 +341,32 @@ export class VaultAgent {
       return `Trashed ${path}`;
     }
     throw new Error(`Unknown tool: ${name}`);
+  }
+}
+
+function messageText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((part) => {
+      if (typeof part === "string") return part;
+      if (part && typeof part === "object" && "text" in part) return String((part as { text?: unknown }).text || "");
+      return "";
+    })
+    .join("");
+}
+
+function parseToolArgs(raw: string): Record<string, string> | null {
+  try {
+    const v: unknown = JSON.parse(raw || "{}");
+    if (!v || typeof v !== "object") return null;
+    const out: Record<string, string> = {};
+    for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+      if (typeof val === "string") out[k] = val;
+      else if (val != null) out[k] = String(val);
+    }
+    return out;
+  } catch {
+    return null;
   }
 }

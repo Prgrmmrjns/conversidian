@@ -1,9 +1,9 @@
 {
 	"id": "mistral-voice",
-	"name": "Mistral Voice",
+	"name": "Conversidian",
 	"version": "1.0.0",
 	"minAppVersion": "1.8.0",
-	"description": "Talk to your vault with Mistral. Speak or type, and optionally create, edit, or delete markdown notes.",
+	"description": "Talk to your vault with Mistral, Ollama, or LM Studio. Speak or type, and optionally edit markdown notes.",
 	"author": "Jonas Wolber",
 	"authorUrl": "https://github.com/Prgrmmrjns",
 	"isDesktopOnly": true

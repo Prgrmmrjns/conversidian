@@ -1,5 +1,18 @@
 import { requestUrl } from "obsidian";
+import { parseJson } from "./providers";
 import type { LMVoiceSettings } from "./settings";
+
+type RecLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  maxAlternatives: number;
+  start: () => void;
+  abort: () => void;
+  onresult: ((ev: { results: { length: number; [i: number]: { 0?: { transcript?: string } } } }) => void) | null;
+  onerror: ((ev: { error?: string }) => void) | null;
+  onend: (() => void) | null;
+};
 
 const API = "https://api.mistral.ai/v1";
 
@@ -108,6 +121,7 @@ export class VoiceIO {
   private audio: HTMLAudioElement | null = null;
   private unvad: (() => void) | null = null;
   private rec: MediaRecorder | null = null;
+  private recWeb: RecLike | null = null;
 
   constructor(
     private settings: () => LMVoiceSettings,
@@ -120,11 +134,22 @@ export class VoiceIO {
       this.audio.src = "";
       this.audio = null;
     }
+    try {
+      window.speechSynthesis?.cancel();
+    } catch {
+      /* ignore */
+    }
   }
 
   stopListen() {
     this.unvad?.();
     this.unvad = null;
+    try {
+      this.recWeb?.abort();
+    } catch {
+      /* ignore */
+    }
+    this.recWeb = null;
     try {
       if (this.rec && this.rec.state !== "inactive") this.rec.stop();
     } catch {
@@ -133,6 +158,47 @@ export class VoiceIO {
   }
 
   async listenTurn(): Promise<string> {
+    if (this.settings().sttProvider === "browser") return this.listenBrowser();
+    return this.listenMistral();
+  }
+
+  private listenBrowser(): Promise<string> {
+    const w = window as Window & { SpeechRecognition?: new () => RecLike; webkitSpeechRecognition?: new () => RecLike };
+    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (!Ctor) throw new Error("This computer has no speech recognition. Switch STT to Mistral, or type.");
+    return new Promise((resolve, reject) => {
+      const rec = new Ctor();
+      this.recWeb = rec;
+      rec.lang = "en-US";
+      rec.continuous = false;
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      let done = false;
+      const finish = (err?: Error, text?: string) => {
+        if (done) return;
+        done = true;
+        this.recWeb = null;
+        if (err) reject(err);
+        else resolve(text || "");
+      };
+      rec.onresult = (ev) => {
+        const last = ev.results[ev.results.length - 1];
+        const text = last?.[0]?.transcript?.trim() || "";
+        if (!text) finish(new Error("Empty transcript"));
+        else finish(undefined, text);
+      };
+      rec.onerror = (ev) => {
+        if (ev.error === "aborted") finish(new Error("Empty transcript"));
+        else finish(new Error(ev.error === "no-speech" ? "Empty transcript" : ev.error || "Speech recognition failed"));
+      };
+      rec.onend = () => {
+        if (!done) finish(new Error("Empty transcript"));
+      };
+      rec.start();
+    });
+  }
+
+  private async listenMistral(): Promise<string> {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       throw new Error("Microphone not available. Allow mic for Obsidian.");
     }
@@ -180,8 +246,7 @@ export class VoiceIO {
       throw: false,
     });
     if (res.status >= 300) throw new Error(`STT ${res.status}: ${(res.text || "").slice(0, 180)}`);
-    const json = typeof res.json === "object" && res.json ? res.json : JSON.parse(res.text || "{}");
-    const text = String((json as { text?: string }).text || "").trim();
+    const text = String(parseJson(res).text || "").trim();
     if (!text) throw new Error("Empty transcript");
     return text;
   }
@@ -190,6 +255,22 @@ export class VoiceIO {
     const t = speakable(text);
     if (!t) return;
     this.cancelSpeak();
+    if (this.settings().ttsProvider === "browser") return this.speakBrowser(t);
+    return this.speakMistral(t);
+  }
+
+  private speakBrowser(t: string): Promise<void> {
+    if (!window.speechSynthesis) throw new Error("This computer has no speech synthesis. Switch TTS to Mistral.");
+    return new Promise((resolve) => {
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = "en-US";
+      u.onend = () => resolve();
+      u.onerror = () => resolve();
+      window.speechSynthesis.speak(u);
+    });
+  }
+
+  private async speakMistral(t: string): Promise<void> {
     const s = this.settings();
     const payload: Record<string, string> = {
       model: s.ttsModel || "voxtral-mini-tts-2603",
@@ -218,8 +299,8 @@ export class VoiceIO {
     let bytes: Uint8Array;
     const rawText = String(res.text || "").trim();
     if (rawText.startsWith("{")) {
-      const json = typeof res.json === "object" && res.json ? res.json : JSON.parse(rawText);
-      const b64 = (json as { audio_data?: string; audio?: string; data?: string }).audio_data || (json as { audio?: string }).audio || (json as { data?: string }).data;
+      const json = parseJson(res);
+      const b64 = String(json.audio_data || json.audio || json.data || "");
       if (!b64) throw new Error("Empty speech");
       bytes = b64ToBytes(b64);
     } else if (res.arrayBuffer && res.arrayBuffer.byteLength > 80) {

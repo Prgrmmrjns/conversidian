@@ -2,7 +2,6 @@ import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
 import type LMVoicePlugin from "./main";
 import { VaultAgent, type ChatMsg } from "./agent";
 import { VoiceIO } from "./audio";
-import { TTS_VOICES } from "./voices";
 
 export const VIEW_TYPE = "mistral-voice-view";
 
@@ -14,14 +13,6 @@ export class VoiceView extends ItemView {
   private composerEl!: HTMLElement;
   private statusEl!: HTMLElement;
   private micBtn!: HTMLButtonElement;
-  private speakBtn!: HTMLButtonElement;
-  private toolsBtn!: HTMLButtonElement;
-  private readBtn!: HTMLButtonElement;
-  private writeBtn!: HTMLButtonElement;
-  private deleteBtn!: HTMLButtonElement;
-  private netBtn!: HTMLButtonElement;
-  private quietBtn!: HTMLButtonElement;
-  private voiceSel!: HTMLSelectElement;
   private inputEl!: HTMLTextAreaElement;
   private running = false;
   private history: ChatMsg[] = [];
@@ -40,7 +31,7 @@ export class VoiceView extends ItemView {
   }
 
   getDisplayText() {
-    return "Mistral Voice";
+    return "Conversidian";
   }
 
   getIcon() {
@@ -55,7 +46,7 @@ export class VoiceView extends ItemView {
 
     const head = root.createDiv({ cls: "lm-voice-head" });
     const titles = head.createDiv({ cls: "lm-voice-titles" });
-    titles.createDiv({ cls: "lm-voice-title", text: "Mistral Voice" });
+    titles.createDiv({ cls: "lm-voice-title", text: "Conversidian" });
     this.statusEl = titles.createDiv({ cls: "lm-voice-status", text: "Ready" });
 
     const headBtns = head.createDiv({ cls: "lm-voice-head-btns" });
@@ -66,25 +57,6 @@ export class VoiceView extends ItemView {
     this.micBtn = stage.createEl("button", { cls: "lm-voice-mic", attr: { type: "button", "aria-label": "Talk" } });
     setIcon(this.micBtn, "mic");
     this.micBtn.addEventListener("click", () => void this.toggle());
-
-    const tools = root.createDiv({ cls: "lm-voice-tools" });
-    this.speakBtn = this.iconBtn(tools, "volume-2", "Speak replies", () => this.toggleSetting("speakReplies"));
-    this.toolsBtn = this.iconBtn(tools, "bot", "Tool calls", () => this.toggleSetting("allowTools"));
-    this.readBtn = this.iconBtn(tools, "book", "Read only", () => this.toggleSetting("readOnly"));
-    this.writeBtn = this.iconBtn(tools, "pencil", "Allow writing notes", () => this.toggleWrite());
-    this.deleteBtn = this.iconBtn(tools, "trash-2", "Allow deleting notes", () => this.toggleSetting("allowDelete"));
-    this.netBtn = this.iconBtn(tools, "globe", "Use internet", () => this.toggleSetting("allowInternet"));
-    this.quietBtn = this.iconBtn(tools, "eye-off", "Hide chat", () => this.toggleSetting("hideChat"));
-
-    this.voiceSel = tools.createEl("select", { cls: "dropdown lm-voice-voice" });
-    for (const v of TTS_VOICES) {
-      this.voiceSel.createEl("option", { text: v.label, value: v.id });
-    }
-    this.voiceSel.value = this.plugin.settings.ttsVoice;
-    this.voiceSel.addEventListener("change", async () => {
-      this.plugin.settings.ttsVoice = this.voiceSel.value;
-      await this.plugin.saveSettings();
-    });
 
     this.logEl = root.createDiv({ cls: "lm-voice-log" });
     this.line("sys", "Tap the mic. Pause when you’re done.");
@@ -107,7 +79,7 @@ export class VoiceView extends ItemView {
       }
     });
 
-    this.syncTools();
+    this.applyChrome();
   }
 
   async onClose() {
@@ -137,34 +109,10 @@ export class VoiceView extends ItemView {
     if (!this.plugin.settings.hideChat) this.line("sys", "Conversation cleared.");
   }
 
-  private async toggleSetting(
-    key: "speakReplies" | "allowDelete" | "allowTools" | "readOnly" | "allowInternet" | "hideChat"
-  ) {
-    this.plugin.settings[key] = !this.plugin.settings[key];
-    await this.plugin.saveSettings();
-    this.syncTools();
-  }
-
-  private async toggleWrite() {
-    const on = !(this.plugin.settings.allowCreate && this.plugin.settings.allowEdit);
-    this.plugin.settings.allowCreate = on;
-    this.plugin.settings.allowEdit = on;
-    if (on) this.plugin.settings.readOnly = false;
-    await this.plugin.saveSettings();
-    this.syncTools();
-  }
-
-  private syncTools() {
-    const s = this.plugin.settings;
-    this.speakBtn.toggleClass("is-off", !s.speakReplies);
-    this.toolsBtn.toggleClass("is-off", !s.allowTools);
-    this.readBtn.toggleClass("is-off", !s.readOnly);
-    this.writeBtn.toggleClass("is-off", s.readOnly || !(s.allowCreate && s.allowEdit));
-    this.deleteBtn.toggleClass("is-off", s.readOnly || !s.allowDelete);
-    this.netBtn.toggleClass("is-off", !s.allowInternet);
-    this.quietBtn.toggleClass("is-off", !s.hideChat);
-    this.voiceSel.value = s.ttsVoice;
-    this.rootEl.toggleClass("is-quiet", s.hideChat);
+  applyChrome() {
+    if (!this.rootEl) return;
+    this.rootEl.setAttr("data-accent", this.plugin.settings.accent || "theme");
+    this.rootEl.toggleClass("is-quiet", this.plugin.settings.hideChat);
   }
 
   private setPhase(p: Phase) {
