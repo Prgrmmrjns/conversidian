@@ -18,7 +18,7 @@ Desktop only (microphone).
 3. Click the ribbon mic, or run **Open**.
 4. Tap the round **mic** button, talk, then pause. Type in the box if you prefer.
 
-**Dictation** (settings toggle): speech to text only, no chat. Click a heading or place the cursor — the section highlights. **Fn** on Mac, **Ctrl+Shift+D** on Windows (remappable). Pause when you’re done; the transcript lands in that section.
+**Dictation** (settings toggle): speech to text only, no chat. Click a heading or place the cursor — the section highlights. **Fn** on Mac (set Globe key to Fn). Bind **Dictate into note** in Hotkeys. Pause when you’re done; the transcript lands in that section.
 
 Voice, accent, tools, and permissions live in **Settings → Vault Talk**.
 

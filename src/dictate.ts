@@ -1,4 +1,4 @@
-import { Editor, MarkdownView, Notice, Platform } from "obsidian";
+import { Editor, MarkdownView, Notice } from "obsidian";
 import { StateEffect } from "@codemirror/state";
 import { Decoration, EditorView, ViewPlugin, ViewUpdate, type DecorationSet } from "@codemirror/view";
 import { VoiceIO } from "./audio";
@@ -17,7 +17,7 @@ const HEADING = /^(#{1,6})\s+(.*)$/;
 const NAV = /^(ArrowUp|ArrowDown|ArrowLeft|ArrowRight|Home|End|PageUp|PageDown)$/;
 const tick = StateEffect.define<null>();
 
-let host: Dictation | null = null;
+let paint = (_view: EditorView): DecorationSet => Decoration.none;
 
 function sectionAt(getLine: (i: number) => string, last: number, line: number) {
   let start = 0;
@@ -44,7 +44,7 @@ function sectionAt(getLine: (i: number) => string, last: number, line: number) {
 }
 
 function marks(view: EditorView, start: number, end: number): DecorationSet {
-  const deco: unknown[] = [];
+  const deco = [];
   const a = Math.max(1, start + 1);
   const last = Math.min(view.state.doc.lines, end + 1);
   for (let n = a; n <= last; n++) {
@@ -58,10 +58,10 @@ const dictationExt = ViewPlugin.fromClass(
   class {
     decorations: DecorationSet;
     constructor(view: EditorView) {
-      this.decorations = host?.deco(view) ?? Decoration.none;
+      this.decorations = paint(view);
     }
     update(u: ViewUpdate) {
-      this.decorations = host?.deco(u.view) ?? Decoration.none;
+      this.decorations = paint(u.view);
     }
   },
   { decorations: (v) => v.decorations }
@@ -92,7 +92,7 @@ export class Dictation {
     this.status.hide();
   }
 
-  deco(view: EditorView): DecorationSet {
+  private deco(view: EditorView): DecorationSet {
     if (!this.plugin.settings.dictation) return Decoration.none;
     if (this.hold) return marks(view, this.hold.start, this.hold.end);
     const line = view.state.doc.lineAt(view.state.selection.main.head).number - 1;
@@ -102,12 +102,11 @@ export class Dictation {
   }
 
   onload() {
-    host = this;
+    paint = (view) => this.deco(view);
     this.plugin.registerEditorExtension(dictationExt);
     this.plugin.addCommand({
       id: "dictate",
       name: "Dictate into note",
-      hotkeys: Platform.isMacOS ? [] : [{ modifiers: ["Mod", "Shift"], key: "d" }],
       checkCallback: (checking) => {
         if (!this.plugin.settings.dictation) return false;
         const view = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
@@ -127,7 +126,7 @@ export class Dictation {
     this.plugin.registerDomEvent(this.status, "click", () => void this.toggle());
     this.plugin.registerEvent(this.plugin.app.workspace.on("active-leaf-change", () => this.refresh()));
     this.plugin.register(() => {
-      host = null;
+      paint = () => Decoration.none;
     });
     this.sync();
   }

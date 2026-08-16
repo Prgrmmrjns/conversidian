@@ -353,7 +353,7 @@ function llmMessage(json: Record<string, unknown>): { content?: unknown; tool_ca
   if (!Array.isArray(choices)) return undefined;
   const first: unknown = choices[0];
   if (!first || typeof first !== "object" || !("message" in first)) return undefined;
-  const message: unknown = (first as { message: unknown }).message;
+  const { message } = first;
   if (!message || typeof message !== "object") return undefined;
   const rec = message as { content?: unknown; tool_calls?: unknown };
   const tool_calls = Array.isArray(rec.tool_calls) ? rec.tool_calls.filter(isToolCall) : [];
