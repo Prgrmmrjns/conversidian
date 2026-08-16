@@ -52,7 +52,7 @@ export function compactNote(src: string, max: number): string {
   t = t.replace(/\[\[[^\]|#/]+[|#]([^\]]+)\]\]/g, "$1");
   t = t.replace(/\[\[([^\]|#]+)\]\]/g, "$1");
   t = t.replace(/^#+\s+/gm, "");
-  t = t.replace(/^[>|*\-]+\s?/gm, "");
+  t = t.replace(/^[>|*+-]+\s?/gm, "");
   t = t.replace(/[`*_~]/g, "");
   t = t.replace(/https?:\/\/\S+/g, "");
   t = t.replace(/\n{2,}/g, "\n");
@@ -170,12 +170,7 @@ export class VaultAgent {
       });
       if (res.status >= 300) throw new Error(`LLM ${res.status}: ${(res.text || "").slice(0, 200)}`);
       const json = parseJson(res);
-      const choices = json.choices;
-      const first = Array.isArray(choices) ? choices[0] : null;
-      const msg =
-        first && typeof first === "object" && first && "message" in first
-          ? (first as { message?: { content?: unknown; tool_calls?: ToolCall[] } }).message
-          : undefined;
+      const msg = llmMessage(json);
       const calls = msg?.tool_calls || [];
       if (!calls.length) {
         spoken = messageText(msg?.content) || spoken;
@@ -337,11 +332,32 @@ export class VaultAgent {
       if (!this.canWrite() || !s.allowDelete) throw new Error("Deleting notes is disabled");
       const file = this.app.vault.getFileByPath(path);
       if (!file) throw new Error(`Missing: ${path}`);
-      await this.app.vault.trash(file, false);
+      await this.app.fileManager.trashFile(file);
       return `Trashed ${path}`;
     }
     throw new Error(`Unknown tool: ${name}`);
   }
+}
+
+function isToolCall(v: unknown): v is ToolCall {
+  if (!v || typeof v !== "object") return false;
+  const o = v as Record<string, unknown>;
+  const fn = o.function;
+  if (typeof o.id !== "string" || !fn || typeof fn !== "object") return false;
+  const f = fn as Record<string, unknown>;
+  return typeof f.name === "string" && typeof f.arguments === "string";
+}
+
+function llmMessage(json: Record<string, unknown>): { content?: unknown; tool_calls?: ToolCall[] } | undefined {
+  const choices = json.choices;
+  if (!Array.isArray(choices)) return undefined;
+  const first: unknown = choices[0];
+  if (!first || typeof first !== "object" || !("message" in first)) return undefined;
+  const message: unknown = (first as { message: unknown }).message;
+  if (!message || typeof message !== "object") return undefined;
+  const rec = message as { content?: unknown; tool_calls?: unknown };
+  const tool_calls = Array.isArray(rec.tool_calls) ? rec.tool_calls.filter(isToolCall) : [];
+  return { content: rec.content, tool_calls };
 }
 
 function messageText(content: unknown): string {

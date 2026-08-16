@@ -77,7 +77,7 @@ function watchSilence(stream: MediaStream, onFire: () => void) {
   const close = () => {
     if (closed) return;
     closed = true;
-    clearInterval(id);
+    window.clearInterval(id);
     void ctx.close();
   };
   const id = window.setInterval(() => {

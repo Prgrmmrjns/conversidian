@@ -58,18 +58,24 @@ export default class LMVoicePlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const raw = (await this.loadData()) as unknown;
+    const extra = raw && typeof raw === "object" ? (raw as Partial<LMVoiceSettings>) : {};
+    this.settings = { ...DEFAULT_SETTINGS, ...extra };
     if (!ACCENTS.some((a) => a.id === this.settings.accent)) this.settings.accent = "theme";
     if (!CHAT_PROVIDERS.some((p) => p.id === this.settings.chatProvider)) this.settings.chatProvider = "mistral";
     if (!SPEECH_PROVIDERS.some((p) => p.id === this.settings.sttProvider)) this.settings.sttProvider = "mistral";
     if (!SPEECH_PROVIDERS.some((p) => p.id === this.settings.ttsProvider)) this.settings.ttsProvider = "mistral";
   }
 
-  async saveSettings() {
-    await this.saveData(this.settings);
+  async saveData(data: unknown): Promise<void> {
+    await super.saveData(data);
     this.dictate?.sync();
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
       if (leaf.view instanceof VoiceView) leaf.view.applyChrome();
     }
+  }
+
+  async saveSettings() {
+    await this.saveData(this.settings);
   }
 }
