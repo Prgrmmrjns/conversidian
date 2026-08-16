@@ -232,3 +232,30 @@
 .lm-voice-prompt {
   width: 100%;
 }
+
+body.vt-dictate-on .cm-line.vt-dictate-sec {
+  background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+}
+
+body.vt-dictate-on .cm-line.vt-dictate-head {
+  box-shadow: inset 3px 0 0 var(--interactive-accent);
+}
+
+body.vt-dictate-listen .cm-line.vt-dictate-sec {
+  background: color-mix(in srgb, var(--color-red) 14%, transparent);
+}
+
+body.vt-dictate-listen .cm-line.vt-dictate-head {
+  box-shadow: inset 3px 0 0 var(--color-red);
+}
+
+.vt-dictate-status {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.vt-dictate-listen .vt-dictate-status {
+  color: var(--color-red);
+}

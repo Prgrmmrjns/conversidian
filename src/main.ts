@@ -1,13 +1,17 @@
 import { Plugin } from "obsidian";
+import { Dictation } from "./dictate";
 import { DEFAULT_SETTINGS, LMVoiceSettingTab, ACCENTS, type LMVoiceSettings } from "./settings";
 import { CHAT_PROVIDERS, SPEECH_PROVIDERS } from "./providers";
 import { VIEW_TYPE, VoiceView } from "./view";
 
 export default class LMVoicePlugin extends Plugin {
   settings: LMVoiceSettings = DEFAULT_SETTINGS;
+  dictate!: Dictation;
 
   async onload() {
     await this.loadSettings();
+    this.dictate = new Dictation(this);
+    this.dictate.onload();
     this.registerView(VIEW_TYPE, (leaf) => new VoiceView(leaf, this));
     this.addRibbonIcon("mic", "Open Vault Talk", () => void this.activate());
     this.addCommand({ id: "open", name: "Open", callback: () => void this.activate() });
@@ -63,6 +67,7 @@ export default class LMVoicePlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
+    this.dictate?.sync();
     for (const leaf of this.app.workspace.getLeavesOfType(VIEW_TYPE)) {
       if (leaf.view instanceof VoiceView) leaf.view.applyChrome();
     }

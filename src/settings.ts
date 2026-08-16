@@ -42,6 +42,7 @@ export interface LMVoiceSettings {
   speakReplies: boolean;
   keepListening: boolean;
   hideChat: boolean;
+  dictation: boolean;
   allowTools: boolean;
   readOnly: boolean;
   allowList: boolean;
@@ -73,6 +74,7 @@ export const DEFAULT_SETTINGS: LMVoiceSettings = {
   speakReplies: true,
   keepListening: true,
   hideChat: false,
+  dictation: false,
   allowTools: true,
   readOnly: false,
   allowList: true,
@@ -294,6 +296,12 @@ export class LMVoiceSettingTab extends PluginSettingTab {
       .setName("Hide chat")
       .setDesc("Mic only. No transcript — useful if you just want notes edited.")
       .addToggle((t) => t.setValue(s.hideChat).onChange((v) => save(() => (s.hideChat = v))));
+
+    new Setting(containerEl).setName("Dictation").setHeading();
+    new Setting(containerEl)
+      .setName("Dictation")
+      .setDesc("Speech to text into the open note — no chat, no spoken reply. Click a heading or place the cursor; the section highlights. Fn on Mac (set Globe key to Fn). Ctrl+Shift+D on Windows, or bind Dictate in Hotkeys.")
+      .addToggle((t) => t.setValue(s.dictation).onChange((v) => save(() => (s.dictation = v))));
 
     new Setting(containerEl).setName("Tools").setHeading();
 
