@@ -8,13 +8,18 @@ type RecLike = {
   interimResults: boolean;
   maxAlternatives: number;
   start: () => void;
+  stop: () => void;
   abort: () => void;
-  onresult: ((ev: { results: { length: number; [i: number]: { 0?: { transcript?: string } } } }) => void) | null;
+  onresult: ((ev: {
+    resultIndex: number;
+    results: { length: number; [i: number]: { isFinal?: boolean; 0?: { transcript?: string } } };
+  }) => void) | null;
   onerror: ((ev: { error?: string }) => void) | null;
   onend: (() => void) | null;
 };
 
 const API = "https://api.mistral.ai/v1";
+const SILENCE_MS = 10_000;
 
 function speakable(t: string) {
   return t
@@ -69,8 +74,6 @@ function watchSilence(stream: MediaStream, onFire: () => void) {
   anal.fftSize = 2048;
   src.connect(anal);
   const data = new Uint8Array(anal.fftSize);
-  let heard = false;
-  let heardAt = 0;
   let quietAt = 0;
   let fired = false;
   let closed = false;
@@ -90,12 +93,10 @@ function watchSilence(stream: MediaStream, onFire: () => void) {
     const rms = Math.sqrt(sum / data.length);
     const now = Date.now();
     if (rms > 0.035) {
-      if (!heard) heardAt = now;
-      heard = true;
       quietAt = 0;
-    } else if (heard && now - heardAt > 600) {
+    } else {
       if (!quietAt) quietAt = now;
-      if (now - quietAt > 900 && !fired) {
+      if (now - quietAt > SILENCE_MS && !fired) {
         fired = true;
         close();
         onFire();
@@ -122,6 +123,7 @@ export class VoiceIO {
   private unvad: (() => void) | null = null;
   private rec: MediaRecorder | null = null;
   private recWeb: RecLike | null = null;
+  private cancelled = false;
 
   constructor(
     private settings: () => LMVoiceSettings,
@@ -142,10 +144,11 @@ export class VoiceIO {
   }
 
   stopListen() {
+    this.cancelled = true;
     this.unvad?.();
     this.unvad = null;
     try {
-      this.recWeb?.abort();
+      this.recWeb?.stop();
     } catch {
       /* ignore */
     }
@@ -158,6 +161,7 @@ export class VoiceIO {
   }
 
   async listenTurn(): Promise<string> {
+    this.cancelled = false;
     if (this.settings().sttProvider === "browser") return this.listenBrowser();
     return this.listenMistral();
   }
@@ -170,30 +174,61 @@ export class VoiceIO {
       const rec = new Ctor();
       this.recWeb = rec;
       rec.lang = "en-US";
-      rec.continuous = false;
-      rec.interimResults = false;
+      rec.continuous = true;
+      rec.interimResults = true;
       rec.maxAlternatives = 1;
       let done = false;
+      let prefix = "";
+      let heard = "";
+      let silenceId = 0;
       const finish = (err?: Error, text?: string) => {
         if (done) return;
         done = true;
+        window.clearTimeout(silenceId);
         this.recWeb = null;
+        try {
+          rec.stop();
+        } catch {
+          /* ignore */
+        }
+        const out = (text || "").trim();
         if (err) reject(err);
-        else resolve(text || "");
+        else if (!out) reject(new Error("Empty transcript"));
+        else resolve(out);
+      };
+      const armSilence = () => {
+        window.clearTimeout(silenceId);
+        silenceId = window.setTimeout(() => finish(undefined, heard), SILENCE_MS);
       };
       rec.onresult = (ev) => {
-        const last = ev.results[ev.results.length - 1];
-        const text = last?.[0]?.transcript?.trim() || "";
-        if (!text) finish(new Error("Empty transcript"));
-        else finish(undefined, text);
+        let session = "";
+        let interim = "";
+        for (let i = 0; i < ev.results.length; i++) {
+          const piece = ev.results[i]?.[0]?.transcript || "";
+          if (ev.results[i]?.isFinal) session += piece;
+          else interim += piece;
+        }
+        heard = [prefix, session.trim(), interim.trim()].filter(Boolean).join(" ");
+        armSilence();
       };
       rec.onerror = (ev) => {
-        if (ev.error === "aborted") finish(new Error("Empty transcript"));
-        else finish(new Error(ev.error === "no-speech" ? "Empty transcript" : ev.error || "Speech recognition failed"));
+        if (ev.error === "aborted" || ev.error === "no-speech") return;
+        finish(new Error(ev.error || "Speech recognition failed"));
       };
       rec.onend = () => {
-        if (!done) finish(new Error("Empty transcript"));
+        if (done) return;
+        prefix = heard;
+        if (this.cancelled) {
+          finish(undefined, heard);
+          return;
+        }
+        try {
+          rec.start();
+        } catch {
+          finish(undefined, heard);
+        }
       };
+      armSilence();
       rec.start();
     });
   }
@@ -204,36 +239,46 @@ export class VoiceIO {
     }
     const mime = pickMime();
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (this.cancelled) {
+      stream.getTracks().forEach((t) => t.stop());
+      throw new Error("Empty transcript");
+    }
     const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
     this.rec = rec;
     const chunks: Blob[] = [];
     rec.ondataavailable = (e) => {
       if (e.data && e.data.size) chunks.push(e.data);
     };
-    rec.start(200);
-    await new Promise<void>((resolve) => {
-      this.unvad = watchSilence(stream, () => resolve());
-      window.setTimeout(() => resolve(), 20000);
-    });
-    this.unvad = null;
     const blob = await new Promise<Blob>((resolve, reject) => {
       rec.onerror = () => reject(new Error("Recording failed"));
       rec.onstop = () => {
+        this.unvad = null;
         stream.getTracks().forEach((t) => t.stop());
         this.rec = null;
         resolve(new Blob(chunks, { type: rec.mimeType || mime || "audio/webm" }));
       };
-      rec.stop();
+      rec.start(200);
+      this.unvad = watchSilence(stream, () => {
+        try {
+          if (rec.state !== "inactive") rec.stop();
+        } catch {
+          /* ignore */
+        }
+      });
     });
     if (!blob.size) throw new Error("Empty recording");
     const bytes = new Uint8Array(await blob.arrayBuffer());
     const ext = (blob.type || "").includes("mp4") ? "m4a" : "webm";
+    return this.transcribeBytes(bytes, `speech.${ext}`, blob.type || "audio/webm");
+  }
+
+  async transcribeBytes(bytes: Uint8Array, filename: string, mime: string): Promise<string> {
     const s = this.settings();
     const { boundary, body } = multipart(
       { model: s.sttModel || "voxtral-mini-latest", language: "en" },
-      `speech.${ext}`,
+      filename,
       bytes,
-      blob.type || "audio/webm"
+      mime || "application/octet-stream"
     );
     const res = await requestUrl({
       url: `${API}/audio/transcriptions`,
